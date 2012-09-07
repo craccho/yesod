@@ -399,20 +399,28 @@ doRequest method url paramsBuild = do
     , BS8.concat $ BSL8.toChunks bytes, "\r\n"]
 
   -- For building the regular non-multipart requests
-  makeSinglepart cookie parts = SRequest (mkRequest 
-    [("Cookie",cookie), ("Content-Type", "application/x-www-form-urlencoded")]) $
-    BSL8.fromChunks $ return $ TE.encodeUtf8 $ T.intercalate "&" $ map singlepartPart parts
+  makeSinglepart cookie parts =
+    SRequest (mkRequestGet gp [("Cookie",cookie), ("Content-Type", "application/x-www-form-urlencoded")]) pp
+    where
+      (gp, pp) = if method == "GET"
+        then
+          (parts, BSL8.pack [])
+        else
+          ([], BSL8.fromChunks $ return $ TE.encodeUtf8 $ T.intercalate "&" $ map singlepartPart parts)
 
   singlepartPart (ReqFilePart _ _ _ _) = ""
   singlepartPart (ReqPlainPart k v) = T.concat [k,"=",v]
 
   -- General request making 
-  mkRequest headers = defaultRequest
+  mkRequest headers = mkRequestGet [] headers
+
+  mkRequestGet parts headers = defaultRequest
     { requestMethod = method
     , remoteHost = Sock.SockAddrInet 1 2
     , requestHeaders = headers
     , rawPathInfo = url
     , pathInfo = DL.filter (/="") $ T.split (== '/') $ TE.decodeUtf8 url
+    , queryString = map (\(ReqPlainPart k v) -> (TE.encodeUtf8 k, Just $ TE.encodeUtf8 v)) parts
     }
   
 -- | Run a persistent db query. For asserting on the results of performed actions
